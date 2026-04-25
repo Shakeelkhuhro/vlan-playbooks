@@ -2,27 +2,40 @@
 - name: Network Changes
   hosts: all
   gather_facts: no
-
   collections:
     - cisco.ios
 
   tasks:
 
     - name: Create VLAN
-      ios_config:
+      cisco.ios.ios_config:
         lines:
           - vlan {{ vlan_id }}
           - name {{ vlan_name }}
-      when: action == "create_vlan"
+      when: task_type == "create_vlan"
 
     - name: Delete VLAN
-      ios_config:
+      cisco.ios.ios_config:
         lines:
           - no vlan {{ vlan_id }}
-      when: action == "delete_vlan"
+      when: task_type == "delete_vlan"
+
+    - name: Interface Down
+      cisco.ios.ios_config:
+        lines:
+          - interface {{ interface_name }}
+          - shutdown
+      when: task_type == "interface_down"
+
+    - name: Interface Up
+      cisco.ios.ios_config:
+        lines:
+          - interface {{ interface_name }}
+          - no shutdown
+      when: task_type == "interface_up"
 
     - name: Verify
-      ios_command:
+      cisco.ios.ios_command:
         commands:
           - show vlan brief
       register: output

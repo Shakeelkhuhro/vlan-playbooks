@@ -3,6 +3,9 @@
   hosts: all
   gather_facts: no
 
+  collections:
+    - cisco.ios
+
   tasks:
 
     - name: Create VLAN
@@ -17,20 +20,6 @@
         lines:
           - no vlan {{ vlan_id }}
       when: action == "delete_vlan"
-
-    - name: Bring Interface Up
-      ios_config:
-        lines:
-          - interface {{ interface_name }}
-          - no shutdown
-      when: action == "interface_up"
-
-    - name: Bring Interface Down
-      ios_config:
-        lines:
-          - interface {{ interface_name }}
-          - shutdown
-      when: action == "interface_down"
 
     - name: Verify
       ios_command:

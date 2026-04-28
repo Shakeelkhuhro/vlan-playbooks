@@ -7,93 +7,98 @@
 
   tasks:
 
-    #################################################################
+    ###############################################################
     # CREATE VLAN
-    #################################################################
+    ###############################################################
 
     - name: Apply Create VLAN Configuration
       cisco.ios.ios_config:
         lines:
           - vlan {{ vlan_id }}
           - name {{ vlan_name | default('AWX_VLAN') }}
-        diff_against: running
       when: task_type == "create_vlan"
       register: current_changes
 
-    #################################################################
+    ###############################################################
     # DELETE VLAN
-    #################################################################
+    ###############################################################
 
     - name: Apply Delete VLAN Configuration
       cisco.ios.ios_config:
         lines:
           - no vlan {{ vlan_id }}
-        diff_against: running
       when: task_type == "delete_vlan"
       register: current_changes
 
-    #################################################################
+    ###############################################################
     # INTERFACE DOWN
-    #################################################################
+    ###############################################################
 
     - name: Apply Interface Shutdown Configuration
       cisco.ios.ios_config:
         parents: "interface {{ interface_name }}"
         lines:
           - shutdown
-        diff_against: running
       when: task_type == "interface_down"
       register: current_changes
 
-    #################################################################
+    ###############################################################
     # INTERFACE UP
-    #################################################################
+    ###############################################################
 
     - name: Apply Interface No Shutdown Configuration
       cisco.ios.ios_config:
         parents: "interface {{ interface_name }}"
         lines:
           - no shutdown
-        diff_against: running
       when: task_type == "interface_up"
       register: current_changes
 
-    #################################################################
-    # DISPLAY EXACT CONFIG DELTA
-    #################################################################
+    ###############################################################
+    # SHOW CURRENT CHANGES
+    ###############################################################
 
-    - name: Display Current Configuration Delta
+    - name: Display Current Changes Applied By Automation
       debug:
-        var: current_changes.updates
+        msg: "{{ current_changes.updates | default(current_changes.commands | default('Configuration Applied Successfully')) }}"
       when: current_changes is defined
 
-    #################################################################
-    # VLAN VERIFICATION
-    #################################################################
+    ###############################################################
+    # VERIFY VLAN TASKS
+    ###############################################################
 
-    - name: Run VLAN Verification Command
+    - name: Verify VLAN Changes
       cisco.ios.ios_command:
         commands:
-          - show vlan brief
+          - show vlan brief | include {{ vlan_id }}
       when: task_type == "create_vlan" or task_type == "delete_vlan"
-      register: verify_output
+      register: vlan_verify_output
 
-    #################################################################
-    # INTERFACE VERIFICATION
-    #################################################################
+    ###############################################################
+    # VERIFY INTERFACE TASKS
+    ###############################################################
 
-    - name: Run Interface Verification Command
+    - name: Verify Interface Changes
       cisco.ios.ios_command:
         commands:
           - show interfaces status | include {{ interface_name }}
       when: task_type == "interface_down" or task_type == "interface_up"
-      register: verify_output
+      register: interface_verify_output
 
-    #################################################################
-    # DISPLAY FINAL VERIFICATION
-    #################################################################
+    ###############################################################
+    # SHOW VLAN VERIFICATION
+    ###############################################################
 
-    - name: Display Final Verification Output
+    - name: Show VLAN Verification Output
       debug:
-        var: verify_output.stdout_lines
-      when: verify_output is defined
+        var: vlan_verify_output.stdout_lines
+      when: vlan_verify_output is defined
+
+    ###############################################################
+    # SHOW INTERFACE VERIFICATION
+    ###############################################################
+
+    - name: Show Interface Verification Output
+      debug:
+        var: interface_verify_output.stdout_lines
+      when: interface_verify_output is defined

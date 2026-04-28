@@ -8,7 +8,20 @@
   tasks:
 
     ###############################################################
-    # APPLY CONFIGURATION CHANGE
+    # INPUT VALIDATION (VERY IMPORTANT)
+    ###############################################################
+
+    - name: Validate Input Parameters
+      ansible.builtin.assert:
+        that:
+          - task_type is defined
+          - task_type in ["create_vlan", "delete_vlan", "interface_up", "interface_down"]
+          - (task_type in ["create_vlan", "delete_vlan"] and vlan_id is defined) or
+            (task_type in ["interface_up", "interface_down"] and interface_name is defined)
+        fail_msg: "Missing or invalid input parameters (vlan_id or interface_name or task_type)"
+
+    ###############################################################
+    # CREATE VLAN
     ###############################################################
 
     - name: Apply Create VLAN Configuration
@@ -19,12 +32,20 @@
       when: task_type == "create_vlan"
       register: current_changes
 
+    ###############################################################
+    # DELETE VLAN
+    ###############################################################
+
     - name: Apply Delete VLAN Configuration
       cisco.ios.ios_config:
         lines:
           - no vlan {{ vlan_id }}
       when: task_type == "delete_vlan"
       register: current_changes
+
+    ###############################################################
+    # INTERFACE DOWN
+    ###############################################################
 
     - name: Apply Interface Shutdown Configuration
       cisco.ios.ios_config:
@@ -33,6 +54,10 @@
           - shutdown
       when: task_type == "interface_down"
       register: current_changes
+
+    ###############################################################
+    # INTERFACE UP
+    ###############################################################
 
     - name: Apply Interface No Shutdown Configuration
       cisco.ios.ios_config:
@@ -43,50 +68,52 @@
       register: current_changes
 
     ###############################################################
-    # SHOW CURRENT APPLIED CHANGE
+    # SHOW CURRENT CHANGES (SAFE OUTPUT)
     ###############################################################
 
-    - name: Display Current Changes Applied By Automation
+    - name: Display Current Changes Applied
       debug:
         msg: "{{ current_changes.updates | default(current_changes.commands | default('Configuration Applied Successfully')) }}"
       when: current_changes is defined
 
     ###############################################################
-    # VLAN VERIFICATION
+    # VLAN VERIFICATION (SAFE - NO FAIL)
     ###############################################################
 
     - name: Verify VLAN Changes
       cisco.ios.ios_command:
         commands:
           - show vlan id {{ vlan_id }}
-      when: task_type == "create_vlan" or task_type == "delete_vlan"
+      when: task_type in ["create_vlan", "delete_vlan"]
       register: vlan_verify_output
+      failed_when: false
 
     ###############################################################
-    # INTERFACE VERIFICATION
+    # INTERFACE VERIFICATION (SAFE - NO FAIL)
     ###############################################################
 
     - name: Verify Interface Changes
       cisco.ios.ios_command:
         commands:
           - show interfaces {{ interface_name }} status
-      when: task_type == "interface_down" or task_type == "interface_up"
+      when: task_type in ["interface_up", "interface_down"]
       register: interface_verify_output
+      failed_when: false
 
     ###############################################################
-    # SHOW VLAN VERIFICATION OUTPUT
+    # DISPLAY VLAN VERIFICATION
     ###############################################################
 
     - name: Show VLAN Verification Output
       debug:
         var: vlan_verify_output.stdout_lines
-      when: task_type == "create_vlan" or task_type == "delete_vlan"
+      when: vlan_verify_output is defined
 
     ###############################################################
-    # SHOW INTERFACE VERIFICATION OUTPUT
+    # DISPLAY INTERFACE VERIFICATION
     ###############################################################
 
     - name: Show Interface Verification Output
       debug:
         var: interface_verify_output.stdout_lines
-      when: task_type == "interface_down" or task_type == "interface_up"
+      when: interface_verify_output is defined

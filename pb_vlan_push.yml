@@ -8,29 +8,42 @@
   tasks:
 
     ###############################################################
-    # VALIDATION
+    # VALIDATION (STRONG - PREVENTS EMPTY VALUES)
     ###############################################################
 
-    - name: Validate Input
+    - name: Validate Input Parameters
       ansible.builtin.assert:
         that:
           - task_type is defined
           - task_type in ["create_vlan", "delete_vlan", "interface_up", "interface_down"]
-          - (task_type in ["create_vlan", "delete_vlan"] and vlan_id is defined) or
-            (task_type in ["interface_up", "interface_down"] and interface_name is defined)
-        fail_msg: "Missing required parameters"
+          - (task_type in ["create_vlan", "delete_vlan"] and vlan_id is defined and vlan_id | string | length > 0)
+          - (task_type in ["interface_up", "interface_down"] and interface_name is defined and interface_name | string | length > 0)
+        fail_msg: "Missing or invalid input (vlan_id / vlan_name / interface_name)"
 
     ###############################################################
-    # APPLY CONFIG
+    # SAFE VARIABLE PREPARATION
+    ###############################################################
+
+    - name: Set Safe VLAN Name
+      set_fact:
+        safe_vlan_name: "{{ vlan_name | default('AWX_VLAN') | trim }}"
+      when: task_type == "create_vlan"
+
+    ###############################################################
+    # CREATE VLAN
     ###############################################################
 
     - name: Apply VLAN Create
       cisco.ios.ios_config:
         lines:
           - vlan {{ vlan_id }}
-          - name {{ vlan_name | default('AWX_VLAN') }}
+          - name {{ safe_vlan_name }}
       when: task_type == "create_vlan"
       register: result
+
+    ###############################################################
+    # DELETE VLAN
+    ###############################################################
 
     - name: Apply VLAN Delete
       cisco.ios.ios_config:
@@ -39,7 +52,11 @@
       when: task_type == "delete_vlan"
       register: result
 
-    - name: Interface Down
+    ###############################################################
+    # INTERFACE DOWN
+    ###############################################################
+
+    - name: Apply Interface Shutdown
       cisco.ios.ios_config:
         parents: "interface {{ interface_name }}"
         lines:
@@ -47,7 +64,11 @@
       when: task_type == "interface_down"
       register: result
 
-    - name: Interface Up
+    ###############################################################
+    # INTERFACE UP
+    ###############################################################
+
+    - name: Apply Interface No Shutdown
       cisco.ios.ios_config:
         parents: "interface {{ interface_name }}"
         lines:
@@ -56,48 +77,52 @@
       register: result
 
     ###############################################################
-    # SHOW CHANGE RESULT
+    # SHOW APPLIED CHANGES (SAFE)
     ###############################################################
 
     - name: Show Applied Changes
       debug:
-        msg: "{{ result.updates | default(result.commands | default('Configuration Applied')) }}"
+        msg: "{{ result.updates | default(result.commands | default('Configuration Applied Successfully')) }}"
       when: result is defined
 
     ###############################################################
-    # VLAN VERIFY
+    # VLAN VERIFICATION
     ###############################################################
 
-    - name: VLAN Verification
+    - name: Verify VLAN Changes
       cisco.ios.ios_command:
         commands:
           - show vlan id {{ vlan_id }}
       when: task_type in ["create_vlan", "delete_vlan"]
-      register: vlan_result
+      register: vlan_verify_output
       failed_when: false
 
     ###############################################################
-    # INTERFACE VERIFY
+    # INTERFACE VERIFICATION
     ###############################################################
 
-    - name: Interface Verification
+    - name: Verify Interface Changes
       cisco.ios.ios_command:
         commands:
           - show interfaces {{ interface_name }} status
       when: task_type in ["interface_up", "interface_down"]
-      register: int_result
+      register: interface_verify_output
       failed_when: false
 
     ###############################################################
-    # FINAL OUTPUT (SAFE)
+    # OUTPUT VLAN
     ###############################################################
 
-    - name: Show VLAN Output
+    - name: Show VLAN Verification Output
       debug:
-        var: vlan_result.stdout_lines | default("No VLAN verification executed")
-      when: vlan_result is defined
+        var: vlan_verify_output.stdout_lines | default("No VLAN verification executed")
+      when: vlan_verify_output is defined
 
-    - name: Show Interface Output
+    ###############################################################
+    # OUTPUT INTERFACE
+    ###############################################################
+
+    - name: Show Interface Verification Output
       debug:
-        var: int_result.stdout_lines | default("No Interface verification executed")
-      when: int_result is defined
+        var: interface_verify_output.stdout_lines | default("No Interface verification executed")
+      when: interface_verify_output is defined

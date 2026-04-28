@@ -8,7 +8,7 @@
   tasks:
 
     ###############################################################
-    # CREATE VLAN
+    # APPLY CONFIGURATION CHANGE
     ###############################################################
 
     - name: Apply Create VLAN Configuration
@@ -19,20 +19,12 @@
       when: task_type == "create_vlan"
       register: current_changes
 
-    ###############################################################
-    # DELETE VLAN
-    ###############################################################
-
     - name: Apply Delete VLAN Configuration
       cisco.ios.ios_config:
         lines:
           - no vlan {{ vlan_id }}
       when: task_type == "delete_vlan"
       register: current_changes
-
-    ###############################################################
-    # INTERFACE DOWN
-    ###############################################################
 
     - name: Apply Interface Shutdown Configuration
       cisco.ios.ios_config:
@@ -41,10 +33,6 @@
           - shutdown
       when: task_type == "interface_down"
       register: current_changes
-
-    ###############################################################
-    # INTERFACE UP
-    ###############################################################
 
     - name: Apply Interface No Shutdown Configuration
       cisco.ios.ios_config:
@@ -55,7 +43,7 @@
       register: current_changes
 
     ###############################################################
-    # SHOW CURRENT CHANGES
+    # SHOW CURRENT APPLIED CHANGE
     ###############################################################
 
     - name: Display Current Changes Applied By Automation
@@ -64,41 +52,41 @@
       when: current_changes is defined
 
     ###############################################################
-    # VERIFY VLAN TASKS
+    # VLAN VERIFICATION
     ###############################################################
 
     - name: Verify VLAN Changes
       cisco.ios.ios_command:
         commands:
-          - show vlan brief | include {{ vlan_id }}
+          - show vlan id {{ vlan_id }}
       when: task_type == "create_vlan" or task_type == "delete_vlan"
       register: vlan_verify_output
 
     ###############################################################
-    # VERIFY INTERFACE TASKS
+    # INTERFACE VERIFICATION
     ###############################################################
 
     - name: Verify Interface Changes
       cisco.ios.ios_command:
         commands:
-          - show interfaces status | include {{ interface_name }}
+          - show interfaces {{ interface_name }} status
       when: task_type == "interface_down" or task_type == "interface_up"
       register: interface_verify_output
 
     ###############################################################
-    # SHOW VLAN VERIFICATION
+    # SHOW VLAN VERIFICATION OUTPUT
     ###############################################################
 
     - name: Show VLAN Verification Output
       debug:
         var: vlan_verify_output.stdout_lines
-      when: vlan_verify_output is defined
+      when: task_type == "create_vlan" or task_type == "delete_vlan"
 
     ###############################################################
-    # SHOW INTERFACE VERIFICATION
+    # SHOW INTERFACE VERIFICATION OUTPUT
     ###############################################################
 
     - name: Show Interface Verification Output
       debug:
         var: interface_verify_output.stdout_lines
-      when: interface_verify_output is defined
+      when: task_type == "interface_down" or task_type == "interface_up"
